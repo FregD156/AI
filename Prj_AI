@@ -1,0 +1,505 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkinter import font as tkfont
+import random                                      
+from sklearn.neighbors import KNeighborsClassifier  
+import webbrowser                                
+import time
+import re
+from collections import Counter
+
+# đặt quy tắc cho input họ tên, email, sđt
+def is_valid_name(name):
+    return name.replace(" ", "").isalpha()
+
+def is_valid_email(email):
+    return re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", email)
+
+def is_valid_phone(phone):
+    return phone.isdigit() and len(phone) >= 10
+
+def is_valid_score(score):
+    try:
+        val = float(score)
+        return 5.0 <= val <= 10.0
+    except ValueError:
+        return False
+
+all_skills = list(range(1, 11)) # tạo list từ 1 -> 10
+
+# kỹ năng tương ứng với list all_skills
+skill_names = [
+    "Tư duy logic", "Giao tiếp", "Sáng tạo", "Phân tích", "Làm việc nhóm",
+    "Ngoại ngữ", "Quản lý thời gian", "Giải quyết vấn đề", "Lãnh đạo", "Lập trình"
+]
+
+majors = [
+    #("tên ngành", danh sách khối thi, môn sở trường, kỹ năng)
+    ("Công nghệ thông tin", [1, 5], 1, [1, 10]),
+    ("Kỹ thuật điện", [1, 5], 2, [1, 8]),
+    ("Y học", [2, 5], 3, [4, 7]),
+    ("Kinh tế", [1, 4], 1, [2, 9]),
+    ("Marketing", [1, 3, 4], 3, [2, 3]),
+    ("Dược học", [2, 5], 4, [4, 7]),
+    ("Sư phạm Văn", [3, 4], 5, [3, 2]),
+    ("Ngôn ngữ Anh", [4], 6, [6, 2]),
+    ("Công nghệ thực phẩm", [1, 2], 1, [4, 8]),
+    ("Kỹ thuật cơ khí", [1, 5], 2, [1, 8]),
+    ("Báo chí", [3, 4], 5, [3, 2]),
+    ("Quản trị kinh doanh", [1, 4], 6, [2, 9]),
+    ("Khoa học máy tính", [1, 5], 1, [1, 10]),
+    ("Kinh doanh quốc tế", [1, 4], 3, [2, 6]),
+    ("Điều dưỡng", [2, 5], 4, [5, 7]),
+    ("Quản lý nhà nước", [3, 4], 5, [3, 2]),
+    ("Kỹ thuật xây dựng", [1, 5], 2, [1, 8]),
+]
+
+khoi_mon_map = {
+    1: ["Toán", "Lý", "Hóa"],
+    2: ["Toán", "Hóa", "Sinh"],
+    3: ["Văn", "Sử", "Địa"],
+    4: ["Toán", "Văn", "Anh"],
+    5: ["Toán", "Lý", "Anh"],
+    6: ["Văn", "Sử", "GDCD"]
+}
+
+khoi_name_map = {
+    "A00": 1,
+    "B00": 2,
+    "C00": 3,
+    "D01": 4,
+    "A01": 5,
+    "C19": 6
+} 
+
+mon_name_to_code = {
+    "Toán": 1, "Lý": 2, "Hóa": 3, "Sinh": 4,
+    "Văn": 5, "Anh": 6, "Sử": 7, "Địa": 8, "GDCD": 9
+}
+
+X_train, y_train = [], [] # biến đầu vào/ra
+
+#cấu hình sinh số mẫu và phổ điểm ("tên ngành": (số mẫu, (phổ điểm)))
+phan_bo_nganh = {
+    "Công nghệ thông tin": (100, (7.5, 10)),
+    "Kỹ thuật điện": (80, (7, 9.5)),
+    "Y học": (100, (8, 10)),
+    "Kinh tế": (90, (7, 9)),
+    "Marketing": (80, (6.5, 9)),
+    "Dược học": (100, (8, 10)),
+    "Sư phạm Văn": (80, (5.5, 9)),
+    "Ngôn ngữ Anh": (70, (6, 9)),
+    "Công nghệ thực phẩm": (70, (6, 8.5)),
+    "Kỹ thuật cơ khí": (80, (6.5, 9)),
+    "Báo chí": (60, (5.5, 8.5)),
+    "Quản trị kinh doanh": (90, (7, 9.5)),
+    "Khoa học máy tính": (90, (7.5, 10)),
+    "Kinh doanh quốc tế": (80, (7, 9)),
+    "Điều dưỡng": (70, (6, 8.5)),
+    "Quản lý nhà nước": (70, (6, 8)),
+    "Kỹ thuật xây dựng": (80, (6.5, 9)),    
+}
+
+# vòng lặp sinh dữ liệu
+for major, khoi_list, mon_so_truong, must_have_skills in majors:
+    so_mau, (min_diem, max_diem) = phan_bo_nganh[major]
+    
+    for khoi in khoi_list:
+        mon_names = khoi_mon_map[khoi]
+        
+        for _ in range(so_mau):
+            diem = [round(random.uniform(min_diem, max_diem), 1) for _ in range(3)]
+            if mon_so_truong in [mon_name_to_code[m] for m in mon_names]:
+                for i, mon in enumerate(mon_names):
+                    if mon_name_to_code[mon] == mon_so_truong:
+                        diem[i] = round(min(diem[i] + 1.0, 10), 1)
+            skill = random.choice(must_have_skills)
+            X_train.append([*diem, khoi, skill])
+            y_train.append(major)
+
+# huấn luyện mô hình AI
+model = KNeighborsClassifier(n_neighbors=15) # k = 15
+model.fit(X_train, y_train)
+
+# Màu sắc chủ đạo
+PRIMARY_COLOR = "#3498db"
+SECONDARY_COLOR = "#2980b9"
+ACCENT_COLOR = "#e74c3c"
+BG_COLOR = "#f5f7fa"
+TEXT_COLOR = "#2c3e50"
+LIGHT_TEXT = "#ecf0f1"
+
+# Tạo ứng dụng
+app = tk.Tk()
+app.title("Hệ Thống Tư Vấn Ngành Học Thông Minh")
+app.geometry("900x700")
+app.configure(bg=BG_COLOR)
+app.resizable(True, True)
+
+# Tạo style mới
+style = ttk.Style()
+style.theme_use('clam')
+
+# Cấu hình style
+style.configure('TFrame', background=BG_COLOR)
+style.configure('TLabel', background=BG_COLOR, foreground=TEXT_COLOR, font=('Helvetica', 11))
+style.configure('TButton', font=('Helvetica', 11, 'bold'), borderwidth=1)
+style.configure('TCombobox', font=('Helvetica', 11))
+style.configure('TEntry', font=('Helvetica', 11))
+
+style.map('TButton',
+          foreground=[('active', LIGHT_TEXT), ('!active', LIGHT_TEXT)],
+          background=[('active', SECONDARY_COLOR), ('!active', PRIMARY_COLOR)])
+
+# Header
+header_frame = ttk.Frame(app, style='TFrame')
+header_frame.pack(fill=tk.X, padx=10, pady=10)
+
+title_font = tkfont.Font(family='Helvetica', size=18, weight='bold')
+title_label = ttk.Label(header_frame, 
+                       text="D&H AI for Education 5.0", 
+                       font=title_font,
+                       foreground=PRIMARY_COLOR)
+title_label.pack(pady=10)
+
+# Main content - Notebook (tabbed interface)
+notebook = ttk.Notebook(app)
+notebook.pack(expand=True, fill=tk.BOTH, padx=10, pady=5)
+
+# --- Giao diện chính ---   
+# Tab 1: Thông tin cá nhân
+personal_frame = ttk.Frame(notebook)
+notebook.add(personal_frame, text="Thông Tin Cá Nhân")
+
+# Form thông tin cá nhân
+form_frame = ttk.Frame(personal_frame, style='TFrame')
+form_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=40)
+
+ttk.Label(form_frame, text="👤 Họ và tên:", font=('Helvetica', 15, 'bold')).grid(row=0, column=0, sticky="w", pady=15)
+name_entry = ttk.Entry(form_frame, width=50)
+name_entry.grid(row=0, column=1, sticky="ew", pady=10)
+
+ttk.Label(form_frame, text="📧 Email:", font=('Helvetica', 15, 'bold')).grid(row=1, column=0, sticky="w", pady=15)
+email_entry = ttk.Entry(form_frame, width=50)
+email_entry.grid(row=1, column=1, sticky="ew", pady=10)
+
+ttk.Label(form_frame, text="📞 Số điện thoại:", font=('Helvetica', 15, 'bold')).grid(row=2, column=0, sticky="w", pady=15)
+phone_entry = ttk.Entry(form_frame, width=50)
+phone_entry.grid(row=2, column=1, sticky="ew", pady=10)
+
+ttk.Label(form_frame, text="🏢 Khu vực:", font=('Helvetica', 15, 'bold')).grid(row=3, column=0, sticky="w", pady=15)
+area_combo = ttk.Combobox(form_frame, values=["Miền Bắc", "Miền Trung", "Miền Nam"], state="readonly")
+area_combo.grid(row=3, column=1, sticky="ew", pady=10)
+
+ttk.Label(form_frame, text="🔑 Sở thích:", font=('Helvetica', 15, 'bold')).grid(row=4, column=0, sticky="w", pady=15)
+hobbies_entry = ttk.Entry(form_frame, width=50)
+hobbies_entry.grid(row=4, column=1, sticky="ew", pady=10)
+
+ttk.Label(form_frame, text="📸 Tài chính:", font = ('HeHelvetica', 15, 'bold')).grid(row=5, column=0, sticky="w", pady=15)
+money_combo = ttk.Combobox(form_frame,
+                          values=["Dưới 5 triệu", "5 - 10 triệu", "10 - 20 triệu", "Trên 20 triệu"],
+                          state="readonly")
+money_combo.grid(row=5, column=1, sticky="ew", pady=10)
+# Tab 2: Thông tin học tập
+study_frame = ttk.Frame(notebook)
+notebook.add(study_frame, text="Thông Tin Học Tập")
+
+# Form thông tin học tập
+study_form_frame = ttk.Frame(study_frame, style='TFrame')
+study_form_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+# Khối thi
+ttk.Label(study_form_frame, text="Chọn khối thi:", font=('Helvetica', 15, 'bold')).grid(row=0, column=0, sticky="w", pady=10)
+khoi_str_var = tk.StringVar(value="A00")
+khoi_combo = ttk.Combobox(study_form_frame, values=list(khoi_name_map.keys()), textvariable=khoi_str_var, state="readonly", width=20)
+khoi_combo.grid(row=0, column=1, sticky="w", pady=10)
+
+# Điểm 3 môn
+mon_labels = []
+mon_entries = []
+
+def update_mon_labels(event=None):
+    khoi = khoi_name_map.get(khoi_str_var.get(), 1)
+    mon_names = khoi_mon_map.get(khoi, ["Môn1", "Môn2", "Môn3"])
+    for i in range(3):
+        mon_labels[i].config(text=f"{mon_names[i]}:")
+    auto_handle_so_truong()
+
+def auto_handle_so_truong(event=None):
+    try:
+        khoi = khoi_name_map.get(khoi_str_var.get(), 1)
+        mon_names = khoi_mon_map.get(khoi, ["Môn1", "Môn2", "Môn3"])
+        diem = [float(e.get()) for e in mon_entries if e.get() != ""]
+        
+        if len(diem) < 3:
+            # Chưa đủ điểm, ẩn combobox
+            so_truong_combo.grid_remove()
+            so_truong_label.grid_remove()
+            so_truong_var.set("")
+            return
+
+        max_score = max(diem)
+        candidates = [i for i, d in enumerate(diem) if abs(d - max_score) <= 0.5]
+
+        if len(candidates) <= 1:
+            # Chỉ có 1 môn mạnh → ẩn combobox
+            so_truong_combo.grid_remove()
+            so_truong_label.grid_remove()
+            so_truong_var.set("")
+        else:
+            # Có nhiều môn mạnh → hiện combobox chọn
+            mon_options = [mon_names[i] for i in candidates]
+            so_truong_combo['values'] = mon_options
+            so_truong_combo.grid()
+            so_truong_label.grid()
+            # Nếu môn đã chọn không còn hợp lệ → reset
+            if so_truong_var.get() not in mon_options:
+                so_truong_var.set("")
+    except:
+        pass  # Lỗi nhẹ do điểm chưa đầy đủ hoặc chưa hợp lệ
+
+for i in range(3):
+    lbl = ttk.Label(study_form_frame, text=f"Môn {i+1}:", font=('Helvetica', 15, 'bold'))
+    lbl.grid(row=i+1, column=0, sticky="w", pady=15)
+    ent = ttk.Entry(study_form_frame, width=40)
+    ent.grid(row=i+1, column=1, sticky="w", pady=15)
+    mon_labels.append(lbl)
+    mon_entries.append(ent)
+    for ent in mon_entries:
+        ent.bind("<KeyRelease>", auto_handle_so_truong)
+
+khoi_combo.bind("<<ComboboxSelected>>", update_mon_labels)
+update_mon_labels()
+
+# Kỹ năng nổi bật
+ttk.Label(study_form_frame, text="Kỹ năng nổi bật:", font=('Helvetica', 15, 'bold')).grid(row=4, column=0, sticky="w", pady=15)
+skill_var = tk.StringVar()
+skill_combo = ttk.Combobox(study_form_frame, values=skill_names, textvariable=skill_var, state="readonly", width=40)
+skill_combo.grid(row=4, column=1, sticky="w", pady=15)
+
+# Môn sở trường (ẩn mặc định)
+so_truong_var = tk.StringVar()
+so_truong_combo = ttk.Combobox(study_form_frame, textvariable=so_truong_var, state="readonly", width=15)
+so_truong_label = ttk.Label(study_form_frame, text="Môn sở trường:", font=('Helvetica', 15, 'bold'))
+so_truong_combo.grid(row=5, column=1, sticky="w", pady=15)
+so_truong_label.grid(row=5, column=0, sticky="w", pady=15)
+so_truong_combo.grid_remove()
+so_truong_label.grid_remove()
+so_truong_var.set("")
+
+# Button với hiệu ứng hover
+def on_enter(e):
+    e.widget['background'] = SECONDARY_COLOR
+
+def on_leave(e):
+    e.widget['background'] = PRIMARY_COLOR
+
+submit_btn = tk.Button(study_form_frame, 
+                      text="TƯ VẤN NGÀNH HỌC", 
+                      bg=PRIMARY_COLOR, 
+                      fg=LIGHT_TEXT,
+                      font=('Helvetica', 15, 'bold'),
+                      bd=0,
+                      padx=20,
+                      pady=10,
+                      command=lambda: predict())
+submit_btn.grid(row=6, column=0, columnspan=2, pady=20)
+submit_btn.bind("<Enter>", on_enter)
+submit_btn.bind("<Leave>", on_leave)
+
+# Tab 3: Kết quả
+result_frame = ttk.Frame(notebook)
+notebook.add(result_frame, text="Kết Quả Tư Vấn", state='disabled')  # Disabled until results are ready
+
+# Kết quả sẽ được hiển thị ở đây
+result_text = tk.Text(result_frame, wrap=tk.WORD, bg=BG_COLOR, fg=TEXT_COLOR, font=('Helvetica', 11))
+result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+result_text.insert(tk.END, "Kết quả tư vấn sẽ được hiển thị tại đây sau khi bạn nhấn nút 'Tư vấn ngành học'")
+result_text.config(state=tk.DISABLED)
+
+# Footer
+footer_frame = ttk.Frame(app, style='TFrame')
+footer_frame.pack(fill=tk.X, padx=10, pady=5)
+
+def open_website():
+    webbrowser.open("https://tuyensinh.moet.gov.vn/ts/")
+
+footer_label = ttk.Label(footer_frame, 
+                        text="© 2025 D&H Hệ Thống Tư Vấn Ngành Học | Liên hệ: DH@tuvannghanh.utt.vn |\n  "
+                            "Ứng dụng này được phát triển bởi D&H nhằm giúp học sinh THPT lựa chọn ngành học phù hợp \n "
+                            "dựa trên điểm thi và sở thích cá nhân.\n"
+                            "* Gợi ý tư vấn ngành học chỉ mang tính chất tham khảo." ,
+                        font=('Helvetica', 9),
+                        foreground=TEXT_COLOR)
+footer_label.pack(side=tk.LEFT)
+
+website_btn = ttk.Button(footer_frame, text="Cổng thông tin tuyển sinh", command=open_website)
+website_btn.pack(side=tk.RIGHT)
+
+# Hàm xử lý dự đoán với animation
+def predict():
+    try:
+        # Kiểm tra thông tin cá nhân
+        name = name_entry.get().strip()
+        email = email_entry.get().strip()
+        phone = phone_entry.get().strip()
+
+        if not is_valid_name(name):
+            messagebox.showerror("Lỗi", "Họ tên chỉ được chứa chữ cái.")
+            submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+            return
+
+        if not is_valid_email(email):
+            messagebox.showerror("Lỗi", "Email không đúng định dạng.")
+            submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+            return
+
+        if not is_valid_phone(phone):
+            messagebox.showerror("Lỗi", "Số điện thoại chỉ được chứa số và tối thiểu 10 chữ số.")
+            submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+            return
+
+        # Hiệu ứng loading
+        submit_btn.config(text="ĐANG PHÂN TÍCH...", state=tk.DISABLED)
+        app.update()
+        
+        # Giả lập thời gian xử lý
+        time.sleep(1)
+        
+        # Lấy dữ liệu từ form
+        khoi = khoi_name_map.get(khoi_str_var.get(), 1) # lấy mã số tương ứng với tên khối
+        mon_names = khoi_mon_map[khoi]                  # lấy tên các môn tưng ứng với tên khối
+
+        diem = []
+        for i, e in enumerate(mon_entries):
+            val = e.get().strip()
+            if val == "":
+                messagebox.showerror("Lỗi", "Vui lòng nhập đầy đủ điểm cho 3 môn.")
+                submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+                return
+            if not is_valid_score(val):
+                messagebox.showerror("Lỗi", f"Điểm phải là số từ 5.0 đến 10.0.")
+                submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+                return
+            diem.append(float(val))
+            
+        diem = [float(e.get()) for e in mon_entries] # ép kiểu string -> float
+
+        skill = skill_var.get()
+        if skill not in skill_names:
+            messagebox.showerror("Lỗi", "Vui lòng chọn kỹ năng nổi bật.")
+            submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+            return
+            
+        skill_index = skill_names.index(skill) + 1 # đưa kĩ năng về dạng chỉ số
+
+        max_score = max(diem)
+        candidates = [i for i, d in enumerate(diem) if abs(d - max_score) <= 0.5]
+        mon_options = [mon_names[i] for i in candidates]
+
+        if len(candidates) == 1:
+            index_so_truong = candidates[0]
+        else:
+            selected = so_truong_var.get()
+            if selected not in mon_options:
+                messagebox.showerror("Lỗi", "Vui lòng chọn môn sở trường trong danh sách hiển thị.")
+                submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+                return
+            index_so_truong = mon_names.index(selected)
+
+        # Tăng nhẹ điểm môn sở trường
+        diem[index_so_truong] = min(diem[index_so_truong] + 0.5, 10)
+
+        # Dự đoán
+        input_data = [*diem, khoi, skill_index]
+
+        # Lấy 15 hàng xóm gần nhất
+        distances, indices = model.kneighbors([input_data], n_neighbors=15)
+
+        # Đếm số lần mỗi ngành xuất hiện trong các hàng xóm phù hợp khối thi
+        counter = Counter()
+        for i in indices[0]:
+            major = y_train[i]
+            # Chỉ tính ngành có khối thi phù hợp
+            for m in majors:
+                if m[0] == major and khoi in m[1]:
+                    counter[major] += 1
+                    break
+
+        # Lấy top 3 ngành
+        filtered_top = counter.most_common(3)
+
+        # Tách danh sách ngành và tính tỷ lệ xuất hiện
+        top_majors = [m for m, _ in filtered_top]
+        top_probs = [count / len(indices[0]) for _, count in filtered_top]  # ví dụ: 9/15 = 0.6
+
+        if not top_majors:
+            messagebox.showinfo("Thông báo", "Không tìm thấy ngành phù hợp với khối thi đã chọn.")
+            submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+            return
+
+        diem[index_so_truong] = min(diem[index_so_truong] - 0.5, 10)
+        
+        # Hiển thị kết quả
+        notebook.tab(2, state='normal')  # Enable results tab
+        notebook.select(2)  # Show results tab
+        
+        result_text.config(state=tk.NORMAL)
+        result_text.delete(1.0, tk.END)
+        
+        # Hiển thị thông tin cá nhân
+        personal_info = f"Thông tin cá nhân:\n"
+        personal_info += f"- Họ tên: {name_entry.get()}\n"
+        personal_info += f"- Email: {email_entry.get()}\n"
+        personal_info += f"- SĐT: {phone_entry.get()}\n"
+        personal_info += f"- Khu vực: {area_combo.get()}\n"
+        personal_info += f"- Sở thích: {hobbies_entry.get()}\n"
+        personal_info += f"- Tài chính: {money_combo.get()}\n\n"
+        
+        result_text.insert(tk.END, personal_info)
+        
+        # Hiển thị thông tin học tập
+        study_info = f"Thông tin học tập:\n"
+        study_info += f"- Khối thi: {khoi_str_var.get()}\n"
+        for i, mon in enumerate(mon_names):
+            study_info += f"- Điểm {mon}: {diem[i]}\n"
+        study_info += f"- Kỹ năng nổi bật: {skill}\n\n"
+        
+        result_text.insert(tk.END, study_info)
+        
+        # Hiển thị kết quả dự đoán
+        result_text.insert(tk.END, "KẾT QUẢ TƯ VẤN:\n", 'header')
+        result_text.tag_configure('header', font=('Helvetica', 14, 'bold'), foreground=PRIMARY_COLOR)
+        
+        for i, (major, prob) in enumerate(zip(top_majors, top_probs)):
+            result_text.insert(tk.END, f"\n{i+1}. {major}\n", 'major')
+            result_text.tag_configure('major', font=('Helvetica', 12, 'bold'))
+            
+            # Thông tin ngành học
+            for m in majors:
+                if m[0] == major:
+                    khoi_thi = ", ".join([k for k, v in khoi_name_map.items() if v in m[1]])
+                    result_text.insert(tk.END, f"- Khối thi phù hợp: {khoi_thi}\n")
+                    
+                    # Tỷ lệ phù hợp
+                    result_text.insert(tk.END, f"- Độ phù hợp: {prob*100:.1f}%\n")
+                    
+                    # Kỹ năng cần có
+                    skill_needed = ", ".join([skill_names[i-1] for i in m[3]])
+                    result_text.insert(tk.END, f"- Kỹ năng cần thiết: {skill_needed}\n")
+                    
+                    # Điểm chuẩn tham khảo
+                    _, (min_d, max_d) = phan_bo_nganh[major]
+                    result_text.insert(tk.END, f"- Điểm khuyến nghị cho mỗi môn: {min_d} - {max_d}\n")
+                    break
+        
+        result_text.config(state=tk.DISABLED)
+        
+        # Reset button
+        submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+        
+    except Exception as e:
+        messagebox.showerror("Lỗi", f"Đã xảy ra lỗi: {str(e)}")
+        submit_btn.config(text="TƯ VẤN NGÀNH HỌC", state=tk.NORMAL)
+
+app.mainloop()
